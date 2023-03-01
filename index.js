@@ -60,6 +60,3 @@ client.login(process.env.TOKEN)
 
 //.env testi 
 //console.log(process.env) 
-
-//botinluvat
-//19330837504
