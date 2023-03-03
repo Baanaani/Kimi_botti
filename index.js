@@ -1,138 +1,84 @@
-require('dotenv').config()
-const fs = require('node:fs');
-const path = require('node:path');
-const { prefix } = require('./.env');
-const ytdl = require('ytdl-core');
+require("dotenv").config();
+//console.log(process.env)
+//const { generateDependencyReport } = require('@discordjs/voice');
+//console.log(generateDependencyReport());
+const {Client, Events, GatewayIntentBits } = require('discord.js');
+const { DisTube } = require("distube");
 
-const { Client, GatewayIntentBits, Events } = require('discord.js');
-const client = new Client({
-  intents: [ GatewayIntentBits.DirectMessages,GatewayIntentBits.Guilds,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent] });
+const client = new Client({ intents:[
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.MessageContent ], });
 
-const queue = new Map();
-
-client.once("ready", () => {
-  console.log("Ready!");
+client.DisTube = new DisTube(client, {
+    leaveOnStop: false,
+    leaveOnEmpty: false,
+    emitNewSongOnly: true,
+    emitAddSongWhenCreatingQueue: false,
+    // emitAddListWhenCreatingQueue: false,
+    
 });
 
-client.once("reconnecting", () => {
-  console.log("Reconnecting!");
+client.DisTube.on("error", (message, error) => {
+    console.error(`Error: ${error}`);
 });
 
-client.once("disconnect", () => {
-  console.log("Disconnect!");
+client.once(Events.ClientReady, c => {
+    console.log(`✅ ${c.user.tag} is online`)
 });
 
-client.on('messageCreate', msg => {
-  
-  if (msg.author.id !== client.user.id) {
-  console.log(msg.author.id);
+client.on(Events.MessageCreate, message => {
+    if (message.author.bot || !message.guild) return;
+    const prefix = "?"
+    const args = message.content.slice(prefix.length).trim().split(/ +/g)
 
-  const serverQueue = queue.get(message.guild.id);
-
-  if (message.content.startsWith(`${prefix}play`)) {
-    execute(message, serverQueue);
-    return;
-  } else if (message.content.startsWith(`${prefix}skip`)) {
-    skip(message, serverQueue);
-    return;
-  } else if (message.content.startsWith(`${prefix}stop`)) {
-    stop(message, serverQueue);
-    return;
-  } else {
-    message.channel.send("You need to enter a valid command!");
-  }
-}});
-
-async function execute(message, serverQueue) {
-  const args = message.content.split(" ");
-
-  const voiceChannel = message.member.voice.channel;
-  if (!voiceChannel)
-    return message.channel.send(
-      "You need to be in a voice channel to play music!"
-    );
-  const permissions = voiceChannel.permissionsFor(message.client.user);
-  if (!permissions.has("CONNECT") || !permissions.has("SPEAK")) {
-    return message.channel.send(
-      "I need the permissions to join and speak in your voice channel!"
-    );
-  }
-
-  const songInfo = await ytdl.getInfo(args[1]);
-  const song = {
-        title: songInfo.videoDetails.title,
-        url: songInfo.videoDetails.video_url,
-   };
-
-  if (!serverQueue) {
-    const queueContruct = {
-      textChannel: message.channel,
-      voiceChannel: voiceChannel,
-      connection: null,
-      songs: [],
-      volume: 5,
-      playing: true
-    };
-
-    queue.set(message.guild.id, queueContruct);
-
-    queueContruct.songs.push(song);
-
-    try {
-      var connection = await voiceChannel.join();
-      queueContruct.connection = connection;
-      play(message.guild, queueContruct.songs[0]);
-    } catch (err) {
-      console.log(err);
-      queue.delete(message.guild.id);
-      return message.channel.send(err);
+    if (args.shift().toLowerCase() === "play") {
+        client.DisTube.play(message.member.voice.channel, args.join(" "), {
+            member: message.member,
+            textChannel: message.channel,
+            message
+            
+        })
     }
-  } else {
-    serverQueue.songs.push(song);
-    return message.channel.send(`${song.title} has been added to the queue!`);
-  }
-}
 
-function skip(message, serverQueue) {
-  if (!message.member.voice.channel)
-    return message.channel.send(
-      "You have to be in a voice channel to stop the music!"
-    );
-  if (!serverQueue)
-    return message.channel.send("There is no song that I could skip!");
-  serverQueue.connection.dispatcher.end();
-}
+    if (message.content.toLowerCase() === prefix + "pause") {
+        client.DisTube.pause(message);
+        message.reply("Musiikin toisto tauolla.");
+        console.log('pause');
+    }
 
-function stop(message, serverQueue) {
-  if (!message.member.voice.channel)
-    return message.channel.send(
-      "You have to be in a voice channel to stop the music!"
-    );
-    
-  if (!serverQueue)
-    return message.channel.send("There is no song that I could stop!");
-    
-  serverQueue.songs = [];
-  serverQueue.connection.dispatcher.end();
-}
+     if (message.content.toLowerCase() === prefix + "resume") {
+        client.DisTube.resume(message);
+        message.reply("Musiikin toistoa jatkettu.");
+        console.log('resume');
+    }
 
-function play(guild, song) {
-  const serverQueue = queue.get(guild.id);
-  if (!song) {
-    serverQueue.voiceChannel.leave();
-    queue.delete(guild.id);
-    return;
-  }
+    if (message.content.toLowerCase() === prefix + "stop") {
+        client.DisTube.stop(message);
+        message.reply("Musiikin toisto lopetettu.");
+        console.log('stop');
+    }
+});
 
-  const dispatcher = serverQueue.connection
-    .play(ytdl(song.url))
-    .on("finish", () => {
-      serverQueue.songs.shift();
-      play(guild, serverQueue.songs[0]);
-    })
-    .on("error", error => console.error(error));
-  dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
-  serverQueue.textChannel.send(`Start playing: **${song.title}**`);
-}
+let voice_connection = Voice.joinVoiceChannel({
+	adapterCreator: guild.voiceAdapterCreator,
+	guildId: guild_id,
+	channelId: channel_id,
+	selfDeaf: true,
+	selfMute: false
+});
 
-client.login(process.env.TOKEN)
+let player = new Voice.AudioPlayer({noSubscriber: Voice.NoSubscriberBehavior.Pause});
+voice_connection.subscribe(player);
+
+let resource = Voice.createAudioResource(local_file_or_stream);
+player.play(resource);
+
+
+client.DisTube.on("playSong", (queue,song) => {
+    queue.textChannel.send("Nyt toistaa: " + song.name)
+});
+
+client.login(process.env.TOKEN);
