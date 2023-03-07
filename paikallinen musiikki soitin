@@ -2,7 +2,11 @@ require("dotenv").config();
 console.log(process.env)
 //const { generateDependencyReport } = require('@discordjs/voice');
 //console.log(generateDependencyReport());
-const {Client, Events, GatewayIntentBits } = require('discord.js');
+const { Client, Events, GatewayIntentBits } = require('discord.js');
+const { createReadStream } = require('node:fs');
+const { join } = require('node:path');
+const { createAudioResource, createAudioPlayer, StreamType } = require('@discordjs/voice');
+const player = createAudioPlayer();
 
 const client = new Client({ intents:[
         GatewayIntentBits.Guilds,
@@ -15,30 +19,20 @@ client.once(Events.ClientReady, c => {
     console.log(`✅ ${c.user.tag} is online`)
 });
 
-client.on(Events.MessageCreate, message => {
-    if (message.author.bot || !message.guild) return;
-    const prefix = "?"
-    const args = message.content.slice(prefix.length).trim().split(/ +/g)
+let resource = createAudioResource(join(__dirname, 'file.mp3'));
 
-    if (args.shift().toLowerCase() === "play") {
-        client.resource.play(message.member.voice.channel, args.join(" "), {
-            member: message.member,
-            textChannel: message.channel,
-            message
-            
-        })
-    }
+resource = createAudioResource(join(__dirname, 'file.mp3'), { inlineVolume: true });
+resource.volume.setVolume(0.5);
 
-const player = createAudioPlayer()
-joinVoiceChannel({
-    channelId: message.member.voice.channel.id,
-    guildId: message.guild.id,
-    adapterCreator: message.guild.voiceAdapterCreator
-}).subscribe(player)
-message.guild.me.voice.setRequestToSpeak(true);
-let resource = createAudioResource(join('..', 'music', 'audio.mp3'));
+resource = createAudioResource(createReadStream(join(__dirname, 'file.ogg'), {
+	inputType: StreamType.OggOpus,
+}));
 
-player.play(resource)
-});
+resource = createAudioResource(createReadStream(join(__dirname, 'file.webm'), {
+	inputType: StreamType.WebmOpus,
+	inlineVolume: true,
+}));
+
+player.play(resource);
 
 client.login(process.env.TOKEN);
